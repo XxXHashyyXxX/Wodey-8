@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub struct Ram {
     memory: [i8; 256],
 }

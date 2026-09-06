@@ -77,6 +77,10 @@ pub enum Instruction {
         dest: RegisterCode,
         source: RegisterCode,
     },
+    MoveIm {
+        dest: RegisterCode,
+        value: i8,
+    },
 
     Cmovz {
         dest: RegisterCode,
@@ -99,4 +103,16 @@ pub enum Instruction {
     },
 
     Halt,
+    Jmp {
+        addr: Address,
+    },
+    Jz {
+        addr: Address,
+    },
+    Jn {
+        addr: Address,
+    },
+    Jof {
+        addr: Address,
+    },
 }

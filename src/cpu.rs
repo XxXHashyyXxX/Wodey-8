@@ -6,6 +6,7 @@ use crate::{
     register::{Register, RegisterCode},
 };
 
+#[derive(Debug)]
 pub struct Cpu<'ram> {
     r1: Register,
     r2: Register,
@@ -322,6 +323,17 @@ impl<'cpu> Cpu<'cpu> {
 
                 Some(Instruction::Move { dest, source })
             }
+            0x91 => {
+                let pc = self.pc.get();
+                self.pc.set(pc + 2);
+
+                let addr = pc as Address;
+
+                let dest = self.ram.get(addr) as RegisterCode;
+                let value = self.ram.get(addr + 1);
+
+                Some(Instruction::MoveIm { dest, value })
+            }
 
             0xB1 => {
                 let pc = self.pc.get();
@@ -379,6 +391,38 @@ impl<'cpu> Cpu<'cpu> {
             }
 
             0xE0 => Some(Instruction::Halt),
+            0xF0 => {
+                let pc = self.pc.get();
+                self.pc.set(pc + 1);
+
+                let addr = self.ram.get(pc as Address) as Address;
+
+                Some(Instruction::Jmp { addr })
+            }
+            0xF8 => {
+                let pc = self.pc.get();
+                self.pc.set(pc + 1);
+
+                let addr = self.ram.get(pc as Address) as Address;
+
+                Some(Instruction::Jz { addr })
+            }
+            0xFC => {
+                let pc = self.pc.get();
+                self.pc.set(pc + 1);
+
+                let addr = self.ram.get(pc as Address) as Address;
+
+                Some(Instruction::Jn { addr })
+            }
+            0xFE => {
+                let pc = self.pc.get();
+                self.pc.set(pc + 1);
+
+                let addr = self.ram.get(pc as Address) as Address;
+
+                Some(Instruction::Jof { addr })
+            }
 
             _ => None,
         }
@@ -400,9 +444,14 @@ impl<'cpu> Cpu<'cpu> {
                     .expect("Invalid register code")
                     .get();
 
+                let (value, overflown) = lhs.overflowing_add(rhs);
+                self.flag_of = overflown;
+                self.flag_n = value < 0;
+                self.flag_z = value == 0;
+
                 self.get_register_mut(dest)
                     .expect("Invalid register code")
-                    .set(lhs + rhs);
+                    .set(value);
             }
             Instruction::Sub {
                 dest,
@@ -418,9 +467,14 @@ impl<'cpu> Cpu<'cpu> {
                     .expect("Invalid register code")
                     .get();
 
+                let (value, overflow) = lhs.overflowing_sub(rhs);
+                self.flag_of = overflow;
+                self.flag_n = value < 0;
+                self.flag_z = value == 0;
+
                 self.get_register_mut(dest)
                     .expect("Invalid register code")
-                    .set(lhs - rhs);
+                    .set(value);
             }
             Instruction::Mul {
                 dest,
@@ -436,9 +490,14 @@ impl<'cpu> Cpu<'cpu> {
                     .expect("Invalid register code")
                     .get();
 
+                let (value, overflow) = lhs.overflowing_mul(rhs);
+                self.flag_of = overflow;
+                self.flag_n = value < 0;
+                self.flag_z = value == 0;
+
                 self.get_register_mut(dest)
                     .expect("Invalid register code")
-                    .set(lhs * rhs);
+                    .set(value);
             }
             Instruction::Div {
                 dest,
@@ -458,9 +517,14 @@ impl<'cpu> Cpu<'cpu> {
                     panic!("Division by zero");
                 }
 
+                let (value, overflow) = lhs.overflowing_div(rhs);
+                self.flag_of = overflow;
+                self.flag_n = value < 0;
+                self.flag_z = value == 0;
+
                 self.get_register_mut(dest)
                     .expect("Invalid register code")
-                    .set(lhs / rhs);
+                    .set(value);
             }
 
             Instruction::And {
@@ -477,9 +541,13 @@ impl<'cpu> Cpu<'cpu> {
                     .expect("Invalid register code")
                     .get();
 
+                let value = lhs & rhs;
+                self.flag_n = value < 0;
+                self.flag_z = value == 0;
+
                 self.get_register_mut(dest)
                     .expect("Invalid register code")
-                    .set(lhs & rhs);
+                    .set(value);
             }
             Instruction::Or {
                 dest,
@@ -495,9 +563,13 @@ impl<'cpu> Cpu<'cpu> {
                     .expect("Invalid register code")
                     .get();
 
+                let value = lhs | rhs;
+                self.flag_n = value < 0;
+                self.flag_z = value == 0;
+
                 self.get_register_mut(dest)
                     .expect("Invalid register code")
-                    .set(lhs | rhs);
+                    .set(value);
             }
             Instruction::Xor {
                 dest,
@@ -513,9 +585,13 @@ impl<'cpu> Cpu<'cpu> {
                     .expect("Invalid register code")
                     .get();
 
+                let value = lhs ^ rhs;
+                self.flag_n = value < 0;
+                self.flag_z = value == 0;
+
                 self.get_register_mut(dest)
                     .expect("Invalid register code")
-                    .set(lhs ^ rhs);
+                    .set(value);
             }
             Instruction::Not { dest, source } => {
                 let val = self
@@ -523,9 +599,13 @@ impl<'cpu> Cpu<'cpu> {
                     .expect("Invalid register code")
                     .get();
 
+                let value = !val;
+                self.flag_n = value < 0;
+                self.flag_z = value == 0;
+
                 self.get_register_mut(dest)
                     .expect("Invalid register code")
-                    .set(!val);
+                    .set(value);
             }
             Instruction::Shl {
                 dest,
@@ -541,9 +621,14 @@ impl<'cpu> Cpu<'cpu> {
                     .expect("Invalid register code")
                     .get();
 
+                let (value, overflow) = lhs.overflowing_shl(rhs as u8 as u32);
+                self.flag_of = overflow;
+                self.flag_n = value < 0;
+                self.flag_z = value == 0;
+
                 self.get_register_mut(dest)
                     .expect("Invalid register code")
-                    .set(lhs << rhs);
+                    .set(value);
             }
             Instruction::Shr {
                 dest,
@@ -559,9 +644,14 @@ impl<'cpu> Cpu<'cpu> {
                     .expect("Invalid register code")
                     .get();
 
+                let (value, overflow) = lhs.overflowing_shr(rhs as u8 as u32);
+                self.flag_of = overflow;
+                self.flag_n = value < 0;
+                self.flag_z = value == 0;
+
                 self.get_register_mut(dest)
                     .expect("Invalid register code")
-                    .set(lhs >> rhs);
+                    .set(value);
             }
 
             Instruction::Cmp { value } => {
@@ -576,6 +666,10 @@ impl<'cpu> Cpu<'cpu> {
 
             Instruction::Load { dest, addr } => {
                 let value = self.ram.get(addr);
+
+                self.flag_n = value < 0;
+                self.flag_z = value == 0;
+
                 self.get_register_mut(dest)
                     .expect("Invalid register code")
                     .set(value);
@@ -586,6 +680,8 @@ impl<'cpu> Cpu<'cpu> {
                     .expect("Invalid register code")
                     .get() as Address;
                 let value = self.ram.get(addr);
+                self.flag_n = value < 0;
+                self.flag_z = value == 0;
                 self.get_register_mut(dest)
                     .expect("Invalid register code")
                     .set(value);
@@ -595,6 +691,8 @@ impl<'cpu> Cpu<'cpu> {
                     .get_register(source)
                     .expect("Invalid register code")
                     .get();
+                self.flag_n = value < 0;
+                self.flag_z = value == 0;
                 self.ram.set(addr, value);
             }
             Instruction::Storer { source, dest } => {
@@ -602,6 +700,8 @@ impl<'cpu> Cpu<'cpu> {
                     .get_register(source)
                     .expect("Invalid register code")
                     .get();
+                self.flag_n = value < 0;
+                self.flag_z = value == 0;
                 let addr = self
                     .get_register(dest)
                     .expect("Invalid register code")
@@ -614,6 +714,15 @@ impl<'cpu> Cpu<'cpu> {
                     .get_register(source)
                     .expect("Invalid register code")
                     .get();
+                self.flag_n = value < 0;
+                self.flag_z = value == 0;
+                self.get_register_mut(dest)
+                    .expect("Invalid register code")
+                    .set(value);
+            }
+            Instruction::MoveIm { dest, value } => {
+                self.flag_n = value < 0;
+                self.flag_z = value == 0;
                 self.get_register_mut(dest)
                     .expect("Invalid register code")
                     .set(value);
@@ -625,6 +734,8 @@ impl<'cpu> Cpu<'cpu> {
                         .get_register(source)
                         .expect("Invalid register code")
                         .get();
+                    self.flag_n = value < 0;
+                    self.flag_z = value == 0;
                     self.get_register_mut(dest)
                         .expect("Invalid register code")
                         .set(value);
@@ -636,6 +747,8 @@ impl<'cpu> Cpu<'cpu> {
                         .get_register(source)
                         .expect("Invalid register code")
                         .get();
+                    self.flag_n = value < 0;
+                    self.flag_z = value == 0;
                     self.get_register_mut(dest)
                         .expect("Invalid register code")
                         .set(value);
@@ -647,6 +760,8 @@ impl<'cpu> Cpu<'cpu> {
                         .get_register(source)
                         .expect("Invalid register code")
                         .get();
+                    self.flag_n = value < 0;
+                    self.flag_z = value == 0;
                     self.get_register_mut(dest)
                         .expect("Invalid register code")
                         .set(value);
@@ -659,6 +774,8 @@ impl<'cpu> Cpu<'cpu> {
                     let mut buf = [0u8; 1];
                     io::stdin().read_exact(&mut buf).unwrap_or(());
                     let value = buf[0] as i8;
+                    self.flag_n = value < 0;
+                    self.flag_z = value == 0;
 
                     self.r1.set(value);
                 }
@@ -669,6 +786,8 @@ impl<'cpu> Cpu<'cpu> {
             Instruction::Out { port } => match port {
                 0 => {
                     let value = self.r1.get() as u8 as char;
+                    self.flag_n = (value as u8 as i8) < 0;
+                    self.flag_z = (value as u8 as i8) == 0;
                     print!("{value}");
                     let _ = io::stdout().flush();
                 }
@@ -677,14 +796,50 @@ impl<'cpu> Cpu<'cpu> {
 
             #[allow(clippy::empty_loop)]
             Instruction::Halt => loop {},
+            Instruction::Jmp { addr } => {
+                self.pc.set(addr as i8);
+            }
+            Instruction::Jz { addr } => {
+                if self.flag_z {
+                    self.pc.set(addr as i8);
+                }
+            }
+            Instruction::Jn { addr } => {
+                if self.flag_n {
+                    self.pc.set(addr as i8);
+                }
+            }
+            Instruction::Jof { addr } => {
+                if self.flag_of {
+                    self.pc.set(addr as i8);
+                }
+            }
         }
     }
 
     pub fn cycle(&mut self) {
         loop {
+            // self.debug();
+
             self.fetch();
             let instruction = self.decode().expect("Invalid instruction");
             self.execute(instruction);
         }
+    }
+
+    #[allow(unused)]
+    fn debug(&self) {
+        println!("CPU State:");
+
+        println!("r1: {}", self.r1.get());
+        println!("r2: {}", self.r2.get());
+        println!("r3: {}", self.r3.get());
+        println!("r4: {}", self.r4.get());
+        println!("r5: {}", self.r5.get());
+        println!("r6: {}", self.r6.get());
+        println!("r7: {}", self.r7.get());
+        println!("r8: {}", self.r8.get());
+        println!("program counter: {}", self.pc.get());
+        println!("instruction register: {}", self.ir.get());
     }
 }

@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub struct Register(i8);
 
 impl Register {
